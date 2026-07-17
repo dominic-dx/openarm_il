@@ -1,0 +1,40 @@
+# Ignore everything by default
+*
+
+# Allow directories to be traversed
+!*/
+
+# Allow specific Linux scripts
+!linux/activate_arms.py
+!linux/collect.py
+!linux/disable_arms.py
+!linux/setup_can.sh
+!linux/identify_arms.py
+!linux/model.py
+!linux/package_dataset.py
+!linux/replay.py
+!linux/rollout.py
+!linux/teleop.py
+!linux/zip_and_checksum.py
+
+# Allow specific desktop scripts
+!desktop/train.py
+!desktop/*.py
+
+# Allow repo-level files
+!.gitignore
+!README.md
+!requirements.txt
+
+# Never allow these even if matched above
+checkpoints/
+*.ckpt
+*.pt
+*.pth
+packaged_dataset/
+*.zip
+*.mp4
+*.log
+__pycache__/
+*.pyc
+.venv/

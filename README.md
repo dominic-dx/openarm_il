@@ -1,6 +1,6 @@
 ## Setup
 pip install -r requirements.txt
-pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu  # or cu126 for GPU
+pip install torch torchvision --index-url https://download.pytorch.org/whl/cu126 for GPU or /cpu for CPU
 
 ## Fetch dataset
 python desktop/fetch_dataset.py --repo-id dominicdx/master --local-dir ../packaged_dataset

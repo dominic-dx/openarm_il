@@ -71,7 +71,13 @@ def train(args):
         epoch_kl = 0.0
 
         pbar = tqdm(loader, desc=f"epoch {epoch+1}/{args.epochs}", leave=False)
+        step_count = 0
         for batch in pbar:
+            if args.max_steps is not None and step_count >= args.max_steps:
+                print(f"[smoke test] Reached max_steps={args.max_steps}, stopping epoch early.")
+                break
+            step_count += 1
+
             image = batch["image"].to(device)
             state = ((batch["state"] - state_mean) / state_std).to(device)
             action_chunk = batch["action_chunk"].to(device)
@@ -94,9 +100,10 @@ def train(args):
                 "kl": f"{kl.item():.4f}",
             })
 
-        avg_loss = epoch_loss / n_batches
-        avg_recon = epoch_recon / n_batches
-        avg_kl = epoch_kl / n_batches
+        actual_batches = step_count if args.max_steps is not None else n_batches
+        avg_loss = epoch_loss / actual_batches
+        avg_recon = epoch_recon / actual_batches
+        avg_kl = epoch_kl / actual_batches
         elapsed = time.time() - epoch_start
         eta_seconds = elapsed * (args.epochs - epoch - 1)
         eta_min = eta_seconds / 60
@@ -125,5 +132,7 @@ if __name__ == "__main__":
     p.add_argument("--partition", type=str, default=None)
     p.add_argument("--name-prefix", type=str, default=None)
     p.add_argument("--frame-stride", type=int, default=1)
+    p.add_argument("--max-steps", type=int, default=None,
+                     help="For smoke tests: stop after N batches regardless of dataset size")
     args = p.parse_args()
     train(args)

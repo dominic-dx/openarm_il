@@ -5,3 +5,5 @@ opencv-python
 huggingface_hub
 tqdm
 pyyaml
+pyarrow
+pandas

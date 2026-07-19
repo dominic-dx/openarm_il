@@ -123,8 +123,9 @@ def train(args):
               f"| {elapsed:.1f}s/epoch | ETA {eta_min:.1f} min")
 
         if epoch % args.save_every == 0 or epoch == args.epochs - 1:
-            save_checkpoint(model, Path(args.output_dir), epoch, norm_stats, config, args.data_root)
-            print(f"  -> checkpoint saved to {args.output_dir}")
+            epoch_dir = Path(args.output_dir) / f"epoch_{epoch+1}"
+            save_checkpoint(model, epoch_dir, epoch, norm_stats, config, args.data_root)
+            print(f"  -> checkpoint saved to {epoch_dir}")
 
     print(f"Training complete. Checkpoint at {args.output_dir}")
 

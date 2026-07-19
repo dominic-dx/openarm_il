@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 """
 Usage (smoke test, tiny model/data, verifies the pipeline works):
-    python3 train.py --data-root ./packaged_dataset --output-dir ./checkpoints/smoke_test \
+    python3 train.py --data-root ./packaged_dataset --output-dir ./checkpoints/smoke_test \\
         --epochs 3 --batch-size 2 --chunk-size 20 --limit-episodes 3
 
-Usage (full training run):
-    python3 train.py --data-root ./packaged_dataset --output-dir ./checkpoints/act_run1 \
-        --epochs 2000 --batch-size 8 --chunk-size 100
+Usage (full training run, dual-camera):
+    python3 train.py --data-root ./packaged_dataset --output-dir ./checkpoints/act_run1 \\
+        --epochs 2000 --batch-size 8 --chunk-size 100 --use-wrist-cam
 """
 
 import argparse
@@ -36,6 +36,7 @@ def save_checkpoint(model, output_dir: Path, epoch: int, norm_stats: dict, confi
     (output_dir / "config.json").write_text(json.dumps({**config, "norm_stats": norm_stats}, indent=2))
     (output_dir / "training_provenance.json").write_text(json.dumps({
         "epoch": epoch, "data_root": str(data_root), "policy_type": "act_custom",
+        "use_wrist_cam": config.get("use_wrist_cam", False),
     }, indent=2))
 
 
@@ -43,11 +44,13 @@ def train(args):
     if args.partition:
         from partitioned_dataset import PartitionedDataset
         dataset = PartitionedDataset(args.data_root, args.index_csv, args.partition,
-                                      chunk_size=args.chunk_size, arm_role="fr")
+                                      chunk_size=args.chunk_size, arm_role="fr",
+                                      use_wrist_cam=args.use_wrist_cam)
     else:
         dataset = PackagedEpisodeDataset(args.data_root, chunk_size=args.chunk_size,
                                           arm_role="fr", limit_episodes=args.limit_episodes,
-                                          name_prefix=args.name_prefix, frame_stride=args.frame_stride)
+                                          name_prefix=args.name_prefix, frame_stride=args.frame_stride,
+                                          use_wrist_cam=args.use_wrist_cam)
 
     loader = DataLoader(dataset, batch_size=args.batch_size, shuffle=True, num_workers=2, drop_last=True)
 
@@ -57,12 +60,15 @@ def train(args):
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Using device: {device}")
-    model = ACTModel(chunk_size=args.chunk_size, pretrained_backbone=True).to(device)
+    model = ACTModel(chunk_size=args.chunk_size, pretrained_backbone=True,
+                      use_wrist_cam=args.use_wrist_cam).to(device)
     optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr)
-    config = {"state_dim": 24, "action_dim": 24, "chunk_size": args.chunk_size, "arm_role": "fr"}
+    config = {"state_dim": 24, "action_dim": 24, "chunk_size": args.chunk_size, "arm_role": "fr",
+              "use_wrist_cam": args.use_wrist_cam}
 
     n_batches = len(loader)
-    print(f"Starting training: {args.epochs} epochs, {n_batches} batches/epoch, batch_size={args.batch_size}")
+    print(f"Starting training: {args.epochs} epochs, {n_batches} batches/epoch, batch_size={args.batch_size}, "
+          f"use_wrist_cam={args.use_wrist_cam}")
 
     for epoch in range(args.epochs):
         epoch_start = time.time()
@@ -83,7 +89,12 @@ def train(args):
             action_chunk = batch["action_chunk"].to(device)
             is_pad = batch["is_pad"].to(device)
 
-            pred_actions, mu, logvar = model(image, state, action_chunk, is_pad)
+            if args.use_wrist_cam:
+                wrist_image = batch["wrist_image"].to(device)
+                pred_actions, mu, logvar = model(image, state, action_chunk, is_pad, wrist_image=wrist_image)
+            else:
+                pred_actions, mu, logvar = model(image, state, action_chunk, is_pad)
+
             loss, recon, kl = act_loss(pred_actions, action_chunk, is_pad, mu, logvar)
 
             optimizer.zero_grad()
@@ -134,5 +145,7 @@ if __name__ == "__main__":
     p.add_argument("--frame-stride", type=int, default=1)
     p.add_argument("--max-steps", type=int, default=None,
                      help="For smoke tests: stop after N batches regardless of dataset size")
+    p.add_argument("--policy-type", type=str, default="act", choices=["act", "diffusion"]) # Not supported yet
+    p.add_argument("--use-wrist-cam", action="store_true", help="Include wrist-cam video as a second input stream")
     args = p.parse_args()
     train(args)

@@ -1,5 +1,12 @@
 #!/usr/bin/env python3
-"""Minimal ACT implementation: ResNet18 backbone + Transformer encoder-decoder + CVAE latent."""
+"""Minimal ACT implementation: ResNet18 backbone(s) + Transformer encoder-decoder + CVAE latent.
+
+Supports an optional second camera (wrist) via use_wrist_cam=True. When enabled,
+a second ResNet18 backbone (not shared weights, separate instance) encodes the
+wrist image, and its tokens are concatenated onto the transformer memory
+alongside the chest-cam tokens, state, and latent -- exactly how ACT's original
+paper handles multi-camera setups.
+"""
 
 import math
 
@@ -41,20 +48,31 @@ class SinusoidalPosEmb2D(nn.Module):
         return pe.unsqueeze(0).expand(b, -1, -1, -1)
 
 
+def build_vision_backbone(pretrained_backbone, hidden_dim):
+    weights = models.ResNet18_Weights.DEFAULT if pretrained_backbone else None
+    backbone = models.resnet18(weights=weights)
+    freeze_batchnorm(backbone)
+    backbone = nn.Sequential(*list(backbone.children())[:-2])
+    proj = nn.Conv2d(512, hidden_dim, kernel_size=1)
+    pos_embed = SinusoidalPosEmb2D(hidden_dim)
+    return backbone, proj, pos_embed
+
+
 class ACTModel(nn.Module):
     def __init__(self, state_dim=24, action_dim=24, chunk_size=100,
                  hidden_dim=512, n_heads=8, n_enc_layers=4, n_dec_layers=7,
-                 latent_dim=32, pretrained_backbone=False):
+                 latent_dim=32, pretrained_backbone=False, use_wrist_cam=False):
         super().__init__()
         self.chunk_size = chunk_size
         self.latent_dim = latent_dim
+        self.use_wrist_cam = use_wrist_cam
 
-        weights = models.ResNet18_Weights.DEFAULT if pretrained_backbone else None
-        backbone = models.resnet18(weights=weights)
-        freeze_batchnorm(backbone)
-        self.backbone = nn.Sequential(*list(backbone.children())[:-2])
-        self.backbone_proj = nn.Conv2d(512, hidden_dim, kernel_size=1)
-        self.img_pos_embed = SinusoidalPosEmb2D(hidden_dim)
+        self.backbone, self.backbone_proj, self.img_pos_embed = build_vision_backbone(
+            pretrained_backbone, hidden_dim)
+
+        if use_wrist_cam:
+            self.wrist_backbone, self.wrist_backbone_proj, self.wrist_pos_embed = build_vision_backbone(
+                pretrained_backbone, hidden_dim)
 
         self.state_proj = nn.Linear(state_dim, hidden_dim)
         self.action_proj = nn.Linear(action_dim, hidden_dim)
@@ -71,16 +89,31 @@ class ACTModel(nn.Module):
         self.action_head = nn.Linear(hidden_dim, action_dim)
         self.query_embed = nn.Parameter(torch.randn(chunk_size, hidden_dim))
 
-    def encode_image(self, image):
-        feat = self.backbone(image)             # (B, C, H', W')
-        feat = self.backbone_proj(feat)          # (B, D, H', W')
-        pos = self.img_pos_embed(feat)           # (B, D, H', W')
+    def _encode_image(self, image, backbone, proj, pos_embed):
+        feat = backbone(image)             # (B, C, H', W')
+        feat = proj(feat)                  # (B, D, H', W')
+        pos = pos_embed(feat)              # (B, D, H', W')
         feat = feat + pos
         return feat.flatten(2).permute(0, 2, 1)  # (B, H'*W', D)
 
-    def forward(self, image, state, action_chunk=None, is_pad=None):
+    def encode_image(self, image):
+        return self._encode_image(image, self.backbone, self.backbone_proj, self.img_pos_embed)
+
+    def encode_wrist_image(self, wrist_image):
+        return self._encode_image(wrist_image, self.wrist_backbone, self.wrist_backbone_proj,
+                                   self.wrist_pos_embed)
+
+    def forward(self, image, state, action_chunk=None, is_pad=None, wrist_image=None):
         img_tokens = self.encode_image(image)               # (B, N, D)
         state_token = self.state_proj(state).unsqueeze(1)   # (B, 1, D)
+
+        if self.use_wrist_cam:
+            if wrist_image is None:
+                raise ValueError("use_wrist_cam=True but no wrist_image was passed to forward()")
+            wrist_tokens = self.encode_wrist_image(wrist_image)  # (B, N, D)
+            vision_tokens = torch.cat([img_tokens, wrist_tokens], dim=1)
+        else:
+            vision_tokens = img_tokens
 
         if action_chunk is not None:
             action_tokens = self.action_proj(action_chunk)  # (B, T, D)
@@ -96,7 +129,7 @@ class ACTModel(nn.Module):
             mu = logvar = None
 
         latent_token = self.latent_proj(z).unsqueeze(1)     # (B, 1, D)
-        memory = torch.cat([img_tokens, state_token, latent_token], dim=1)
+        memory = torch.cat([vision_tokens, state_token, latent_token], dim=1)
 
         B = image.shape[0]
         queries = self.query_embed.unsqueeze(0).expand(B, -1, -1)

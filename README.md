@@ -4,6 +4,7 @@ pip install torch torchvision --index-url https://download.pytorch.org/whl/cu126
 
 ## Fetch dataset
 python desktop/fetch_dataset.py --repo-id dominicdx/master --local-dir ../packaged_dataset
+python desktop/fetch_dataset.py --repo-id dominicdx/clean --local-dir ../packaged_clean
 
 ## Train all variants
 python desktop/train_all.py --epochs 8

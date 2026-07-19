@@ -107,11 +107,16 @@ def package(roots, output: Path, status_file: Path):
             out_pq = out_data / f"{unique_name}.parquet"
             df.to_parquet(out_pq)
 
+            wrist_png_dir = root / "tmp_frames" / f"episode_{ep_idx:06d}" / "cam_right_wrist"
+            wrist_mp4 = out_video / f"{unique_name}_wrist.mp4"
+            has_wrist = encode_episode_video(wrist_png_dir, wrist_mp4)
+
             manifest["episodes"].append({
                 "name": unique_name,
                 "source_root": root.name,
                 "source_episode_index": ep_idx,
                 "n_frames": len(df),
+                "has_wrist_cam": has_wrist,
             })
             manifest["total_frames"] += len(df)
             log(status_file, f"  OK {unique_name}: {len(df)} frames encoded")

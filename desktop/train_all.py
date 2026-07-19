@@ -6,7 +6,7 @@ import sys
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 TRAIN_SCRIPT = SCRIPT_DIR / "train.py"
-DATASET_ROOTS = ["dataset", "dataset_100", "dataset_quality"]
+DATASET_ROOTS = ["dataset", "dataset_100", "dataset_quality", "dataset_clean"]
 
 def run_training(data_root, output_dir, name_prefix, partition, index_csv, args):
     cmd = [
@@ -26,7 +26,9 @@ def run_training(data_root, output_dir, name_prefix, partition, index_csv, args)
         cmd += ["--limit-episodes", str(args.limit_episodes)]
     if args.max_steps:
         cmd += ["--max-steps", str(args.max_steps)]
-    
+    if args.use_wrist_cam:
+        cmd += ["--use-wrist-cam"]
+
     print(f"Running: {' '.join(cmd)}")
     subprocess.run(cmd, check=True)
 
@@ -37,11 +39,17 @@ def main():
     parser.add_argument("--index-csv", default=None)
     parser.add_argument("--epochs", type=int, default=8)
     parser.add_argument("--batch-size", type=int, default=8)
-    parser.add_argument("--chunk-size", type=int, default=50)
+    parser.add_argument("--chunk-size", type=int, default=200)
     parser.add_argument("--save-every", type=int, default=1)
     parser.add_argument("--frame-stride", type=int, default=10)
     parser.add_argument("--limit-episodes", type=int, default=None)
     parser.add_argument("--max-steps", type=int, default=None)
+    parser.add_argument("--use-wrist-cam", action="store_true",
+                         help="Include wrist-cam video as a second input stream for every variant")
+    parser.add_argument("--run-name", type=str, default=None,
+                         help="Optional suffix appended to each output checkpoint dir, e.g. longhorizon_wrist")
+    parser.add_argument("--only", type=str, default=None,
+                         help="Comma-separated subset of DATASET_ROOTS to run, e.g. dataset_clean")
     args = parser.parse_args()
 
     if args.index_csv is None:
@@ -53,12 +61,19 @@ def main():
     if not Path(args.index_csv).exists():
         raise FileNotFoundError(f"index.csv not found at {args.index_csv}. Run fetch_dataset.py first.")
 
-    for root in DATASET_ROOTS:
-        out_dir = f"{args.checkpoints_root}/{root}_run"
+    roots = DATASET_ROOTS
+    if args.only:
+        wanted = {r.strip() for r in args.only.split(",")}
+        roots = [r for r in DATASET_ROOTS if r in wanted]
+        if not roots:
+            raise ValueError(f"--only={args.only} matched none of {DATASET_ROOTS}")
+
+    suffix = f"_{args.run_name}" if args.run_name else ""
+
+    for root in roots:
+        out_dir = f"{args.checkpoints_root}/{root}_run{suffix}"
         run_training(args.data_root, out_dir, root, root, args.index_csv, args)
 
-    combined_out = f"{args.checkpoints_root}/combined_run"
-    run_training(args.data_root, combined_out, "combined", "combined", args.index_csv, args)
-
-if __name__ == "__main__":
-    main()
+    if not args.only or "combined" in (args.only or ""):
+        combined_out = f"{args.checkpoints_root}/combined_run{suffix}"
+        run_training(args.data_root, combined_out, "combined", "combined", args.index_csv, args)

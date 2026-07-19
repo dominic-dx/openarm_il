@@ -77,3 +77,6 @@ def main():
     if not args.only or "combined" in (args.only or ""):
         combined_out = f"{args.checkpoints_root}/combined_run{suffix}"
         run_training(args.data_root, combined_out, "combined", "combined", args.index_csv, args)
+
+if __name__ == "__main__":
+    main()

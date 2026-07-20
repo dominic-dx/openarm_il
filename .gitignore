@@ -16,6 +16,7 @@
 !linux/rollout.py
 !linux/teleop.py
 !linux/zip_and_checksum.py
+!linux/read_positions.py
 
 # Allow specific desktop scripts
 !desktop/train.py

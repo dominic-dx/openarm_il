@@ -20,3 +20,9 @@ hf download aiet2/openarm-il-dataset-run ./checkpoints/model3
 hf download aiet2/dataset-quality-run ./checkpoints/model4
 hf download aiet2/dataset-clean-run ./checkpoints/model5
 **The structure of model5 has 6 epochs inside it: model5/epoch{2-7}**
+
+
+## rollout.py usage
+After downloading, use the following command to rollout
+
+python rollout.py --checkpoints ./checkpoints/modelX --n-action-steps 50 

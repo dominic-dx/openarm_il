@@ -29,8 +29,13 @@ python rollout.py --checkpoints ./checkpoints/modelX --n-action-steps 50
 
 
 ## DATASETS SO FAR:
-So far, stored locally on the linux PC. Models are available on HF (may be private repo)
+So far, most of these are stored locally on the linux PC. All models are available on HF (may be private repo)
 Use replay.py to see the model in physical space, otherwise just watch the videos.
+
+Most of the datasets were prepared (recorded and trained) in this framework, though one was recorded (not trained
+yet) in the Lerobot framework. If you have access to the private repo feel free to train it and push to the hub.
+We hope to setup the OpenArm on our NVIDIA Jetson Thor with Lerobot so that we can try more advanced Vision 
+Language Action models (like SmolVLA, pi0,...) but we're not there yet!
 
 ### The datasets were recorded in slightly different environments. 
 ### The following were recorded on the green pallet, with ONE overhead camera
@@ -49,4 +54,16 @@ Use replay.py to see the model in physical space, otherwise just watch the video
 
 ### The following were recorded in the RPL through lerobot
 - "dataset_lerobot": 100 successful episodes recorded using Lerobot framework
-    - NOTE: Not hosted online... probably floating in the huggingface cache folder in the RPL.
+    - dominicdx/rpl_pick_and_place1 (private repo)
+
+Contact dominicmotekaitis@tamu.edu for access to private repos.
+
+### Available models:
+These correspond to the datasets above.
+aiet2/dataset-combined-run
+aiet2/dataset-quality-run
+aiet2/dataset-100-run
+aiet2/openarm-il-dataset-run
+
+aiet2/dataset-clean-run
+    - checkpoints saved: ./epoch{2-7}

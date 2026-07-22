@@ -21,6 +21,7 @@
 # Allow specific desktop scripts
 !desktop/train.py
 !desktop/*.py
+!evaluation/*
 
 # Allow repo-level files
 !.gitignore
